@@ -3,7 +3,7 @@
 ### Predictive Intelligence for Wind Turbine Fleets
 
 **Team:** Code Crusaders  
-**Members:** Mustafa Kharodawala · Parth Garg · Raag Patel · Aditya Sharda
+**Members:** Parth Garg · Aaditya Sarda · Mustafa Kharodawala · Raag Patel
 
 WindSentry is a **SCADA-driven predictive maintenance platform for wind turbine fleets**. It turns raw turbine telemetry into an explainable diagnosis, a prioritized maintenance action, and an estimate of what it costs to wait.
 
