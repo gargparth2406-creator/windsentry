@@ -455,7 +455,7 @@ That is the shift from **alarm monitoring** to **explainable maintenance intelli
 - **Mustafa Kharodawala**
 - **Parth Garg**
 - **Raag Patel**
-- **Aditya Sharda**
+- **Aaditya Sharda**
 
 ---
 
