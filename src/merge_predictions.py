@@ -1,5 +1,4 @@
 import pandas as pd
-from pathlib import Path
 
 
 POWER_FILE = "data/processed/power_predictions.csv"
@@ -11,23 +10,121 @@ OUTPUT_FILE = (
 )
 
 
-print("Loading power predictions...")
-power = pd.read_csv(POWER_FILE)
+KEY_COLUMNS = [
+    "Turbine_ID",
+    "Timestamp"
+]
 
-print("Loading anomaly predictions...")
-anomaly = pd.read_csv(ANOMALY_FILE)
 
+print("=" * 80)
+print("AERIS PREDICTION MERGE")
+print("=" * 80)
+
+
+# ============================================================
+# LOAD
+# ============================================================
+
+print("\nLoading power predictions...")
+
+power = pd.read_csv(
+    POWER_FILE
+)
+
+print("Power shape:", power.shape)
+
+
+print("\nLoading anomaly predictions...")
+
+anomaly = pd.read_csv(
+    ANOMALY_FILE
+)
+
+print("Anomaly shape:", anomaly.shape)
+
+
+# ============================================================
+# TIMESTAMP NORMALIZATION
+# ============================================================
 
 power["Timestamp"] = pd.to_datetime(
-    power["Timestamp"]
+    power["Timestamp"],
+    utc=True
 )
 
 anomaly["Timestamp"] = pd.to_datetime(
-    anomaly["Timestamp"]
+    anomaly["Timestamp"],
+    utc=True
 )
 
 
-# Keep only the useful columns from power model
+# ============================================================
+# DUPLICATE CHECK BEFORE MERGE
+# ============================================================
+
+print("\nDuplicate keys before merge:")
+
+power_duplicates = power.duplicated(
+    subset=KEY_COLUMNS
+).sum()
+
+anomaly_duplicates = anomaly.duplicated(
+    subset=KEY_COLUMNS
+).sum()
+
+print(
+    "Power duplicates:",
+    power_duplicates
+)
+
+print(
+    "Anomaly duplicates:",
+    anomaly_duplicates
+)
+
+
+# ============================================================
+# REMOVE SOURCE DUPLICATES
+# ============================================================
+
+print("\nRemoving duplicate turbine-timestamp records...")
+
+power = (
+    power
+    .sort_values(KEY_COLUMNS)
+    .drop_duplicates(
+        subset=KEY_COLUMNS,
+        keep="last"
+    )
+    .copy()
+)
+
+anomaly = (
+    anomaly
+    .sort_values(KEY_COLUMNS)
+    .drop_duplicates(
+        subset=KEY_COLUMNS,
+        keep="last"
+    )
+    .copy()
+)
+
+
+print(
+    "Power shape after deduplication:",
+    power.shape
+)
+
+print(
+    "Anomaly shape after deduplication:",
+    anomaly.shape
+)
+
+
+# ============================================================
+# KEEP USEFUL POWER COLUMNS
+# ============================================================
+
 power_columns = [
     "Turbine_ID",
     "Timestamp",
@@ -37,11 +134,18 @@ power_columns = [
 ]
 
 power = power[
-    [c for c in power_columns if c in power.columns]
+    [
+        c
+        for c in power_columns
+        if c in power.columns
+    ]
 ]
 
 
-# Keep useful anomaly columns
+# ============================================================
+# KEEP USEFUL ANOMALY COLUMNS
+# ============================================================
+
 anomaly_columns = [
     "Turbine_ID",
     "Timestamp",
@@ -59,25 +163,43 @@ anomaly_columns = [
 ]
 
 anomaly = anomaly[
-    [c for c in anomaly_columns if c in anomaly.columns]
+    [
+        c
+        for c in anomaly_columns
+        if c in anomaly.columns
+    ]
 ]
 
 
-# Merge using the actual turbine and timestamp
+# ============================================================
+# MERGE
+# ============================================================
+
+print("\nMerging predictions...")
+
 df = pd.merge(
     anomaly,
     power,
-    on=["Turbine_ID", "Timestamp"],
+    on=KEY_COLUMNS,
     how="left",
     suffixes=("", "_power")
 )
 
 
-# Sort
-df = df.sort_values(
-    ["Turbine_ID", "Timestamp"]
-).reset_index(drop=True)
+# ============================================================
+# SORT
+# ============================================================
 
+df = df.sort_values(
+    KEY_COLUMNS
+).reset_index(
+    drop=True
+)
+
+
+# ============================================================
+# VALIDATION
+# ============================================================
 
 print("\nFinal shape:")
 print(df.shape)
@@ -85,13 +207,60 @@ print(df.shape)
 print("\nColumns:")
 print(df.columns.tolist())
 
+
 print("\nMissing values:")
+
 print(
     df[
-        ["expected_power", "power_deviation"]
+        [
+            "expected_power",
+            "power_deviation"
+        ]
     ].isnull().sum()
 )
 
+
+print("\nDuplicate turbine-timestamp keys:")
+
+final_duplicates = df.duplicated(
+    subset=KEY_COLUMNS
+).sum()
+
+print(final_duplicates)
+
+
+print("\nUnique turbines:")
+
+print(
+    df["Turbine_ID"]
+    .nunique()
+)
+
+
+print("\nTurbines:")
+
+print(
+    sorted(
+        df["Turbine_ID"]
+        .dropna()
+        .unique()
+        .tolist()
+    )
+)
+
+
+print("\nTimestamp range:")
+
+print(
+    df["Timestamp"].min(),
+    "to",
+    df["Timestamp"].max()
+)
+
+
+# ============================================================
+# SAVE
+# ============================================================
 
 df.to_csv(
     OUTPUT_FILE,
@@ -101,3 +270,7 @@ df.to_csv(
 
 print("\nSaved:")
 print(OUTPUT_FILE)
+
+print("\n" + "=" * 80)
+print("AERIS PREDICTION MERGE FINISHED")
+print("=" * 80)
