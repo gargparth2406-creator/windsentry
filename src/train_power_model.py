@@ -13,14 +13,19 @@ INPUT_FILE = "data/processed/edp_features.csv"
 MODEL_DIR = Path("models")
 MODEL_DIR.mkdir(exist_ok=True)
 
+OUTPUT_FILE = "data/processed/power_predictions.csv"
 
-print("Loading dataset...")
+
+print("=" * 80)
+print("AERIS EXPECTED POWER PREDICTION")
+print("=" * 80)
+
+print("\nLoading dataset...")
 
 df = pd.read_csv(INPUT_FILE)
 
 df["Timestamp"] = pd.to_datetime(df["Timestamp"])
 
-# Sort chronologically
 df = df.sort_values(
     ["Turbine_ID", "Timestamp"]
 ).reset_index(drop=True)
@@ -44,24 +49,27 @@ FEATURES = [
 TARGET = "Grd_Prod_Pwr_Avg"
 
 
-# Remove rows with missing values
-df = df.dropna(
+# ---------------------------------------
+# Keep rows usable for model training
+# ---------------------------------------
+
+model_df = df.dropna(
     subset=FEATURES + [TARGET]
-)
+).copy()
 
 
 # ---------------------------------------
 # Chronological split
 # ---------------------------------------
 
-split_time = df["Timestamp"].quantile(0.80)
+split_time = model_df["Timestamp"].quantile(0.80)
 
-train = df[
-    df["Timestamp"] <= split_time
+train = model_df[
+    model_df["Timestamp"] <= split_time
 ].copy()
 
-test = df[
-    df["Timestamp"] > split_time
+test = model_df[
+    model_df["Timestamp"] > split_time
 ].copy()
 
 
@@ -99,31 +107,29 @@ model.fit(
 
 
 # ---------------------------------------
-# Predictions
+# Evaluate on test data
 # ---------------------------------------
 
-predictions = model.predict(X_test)
+print("\nEvaluating model...")
 
+test_predictions = model.predict(X_test)
 
-# ---------------------------------------
-# Evaluation
-# ---------------------------------------
 
 mae = mean_absolute_error(
     y_test,
-    predictions
+    test_predictions
 )
 
 rmse = np.sqrt(
     mean_squared_error(
         y_test,
-        predictions
+        test_predictions
     )
 )
 
 r2 = r2_score(
     y_test,
-    predictions
+    test_predictions
 )
 
 
@@ -135,33 +141,36 @@ print("R2  :", r2)
 
 
 # ---------------------------------------
-# Expected power
+# Predict ALL usable rows
 # ---------------------------------------
 
-test["expected_power"] = predictions
+print("\nGenerating predictions for all usable rows...")
+
+all_predictions = model.predict(
+    model_df[FEATURES]
+)
+
+model_df["expected_power"] = all_predictions
 
 
 # ---------------------------------------
 # Power deviation
 # ---------------------------------------
 
-test["power_deviation"] = (
-    test["expected_power"] -
-    test[TARGET]
-) / test["expected_power"].clip(lower=1)
+model_df["power_deviation"] = (
+    model_df["expected_power"]
+    - model_df[TARGET]
+) / model_df["expected_power"].clip(lower=1)
 
 
 # ---------------------------------------
-# Save predictions
+# Save ALL usable predictions
 # ---------------------------------------
 
-output_file = (
-    "data/processed/"
-    "power_predictions.csv"
-)
+print("\nSaving power predictions...")
 
-test.to_csv(
-    output_file,
+model_df.to_csv(
+    OUTPUT_FILE,
     index=False
 )
 
@@ -182,7 +191,25 @@ joblib.dump(
 
 
 print("\nSaved predictions:")
-print(output_file)
+print(OUTPUT_FILE)
 
 print("\nSaved model:")
 print(model_file)
+
+print("\nOutput shape:")
+print(model_df.shape)
+
+print("\nMissing power values:")
+print(
+    model_df[
+        [
+            "Grd_Prod_Pwr_Avg",
+            "expected_power",
+            "power_deviation"
+        ]
+    ].isna().sum()
+)
+
+print("\n" + "=" * 80)
+print("EXPECTED POWER PREDICTION FINISHED")
+print("=" * 80)
